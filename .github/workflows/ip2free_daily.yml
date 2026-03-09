@@ -1,0 +1,70 @@
+name: IP2Free Daily Claim
+
+on:
+  schedule:
+    # 每天北京时间 08:01 运行 (UTC 00:01)
+    - cron: '1 0 * * *'
+  workflow_dispatch: # 允许手动触发测试
+
+jobs:
+  claim_reward:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Execute Claim Script
+        env:
+          # 从 GitHub Secrets 中读取私密变量
+          EMAIL: ${{ secrets.IP2FREE_EMAIL }}
+          PASSWORD: ${{ secrets.IP2FREE_PASSWORD }}
+          UA: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        run: |
+          echo "--- 开始登录程序 ---"
+          
+          # 1. 自动登录获取 Token
+          LOGIN_RESPONSE=$(curl -s -X POST "https://api.ip2free.com/api/account/login?" \
+            -H "User-Agent: $UA" \
+            -H "Origin: https://www.ip2free.com" \
+            -H "Referer: https://www.ip2free.com/" \
+            -H "webname: IP2FREE" \
+            -H "content-type: text/plain;charset=UTF-8" \
+            -H "lang: cn" \
+            --data-binary "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}")
+
+          TOKEN=$(echo "$LOGIN_RESPONSE" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+
+          if [ -z "$TOKEN" ]; then
+            echo "❌ 登录失败"
+            echo "服务器原始响应: $LOGIN_RESPONSE"
+            exit 1
+          fi
+
+          echo "✅ 登录成功，Token 已就绪"
+
+          # 2. 执行领取奖励请求 (Task ID: 48730)
+          # 注意：这里需要添加 Origin 和 Referer 绕过 Nginx 403 限制
+          CLAIM_RESPONSE=$(curl -s -X POST "https://api.ip2free.com/api/account/finishTask?" \
+            -H "User-Agent: $UA" \
+            -H "Origin: https://www.ip2free.com" \
+            -H "Referer: https://www.ip2free.com/" \
+            -H "x-token: $TOKEN" \
+            -H "webname: IP2FREE" \
+            -H "content-type: text/plain;charset=UTF-8" \
+            --data-binary "{\"id\":48730}")
+
+          echo "--- 领取结果处理 ---"
+          echo "服务器响应: $CLAIM_RESPONSE"
+
+          # 3. 逻辑判定：成功(code:0) 或 已完成(code:-1) 均视为流水线成功
+          if echo "$CLAIM_RESPONSE" | grep -q '"code":0'; then
+            echo "🎉 领取奖励成功！"
+            exit 0
+          elif echo "$CLAIM_RESPONSE" | grep -q '"code":-1'; then
+            echo "💡 提示：任务早已完成，无需重复领取。"
+            exit 0
+          else
+            echo "❌ 发生未知错误，流水线判定为失败。"
+            exit 1
+          fi
