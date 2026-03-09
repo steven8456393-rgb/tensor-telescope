@@ -1,4 +1,4 @@
-name: IP2Free Daily Claim
+name: IP2Free 每日自动领取奖励
 
 on:
   schedule:
@@ -9,19 +9,22 @@ on:
 jobs:
   claim_reward:
     runs-on: ubuntu-latest
+    name: 执行领取奖励任务
 
     steps:
-      - name: Checkout Code
+      - name: 获取项目代码
         uses: actions/checkout@v4
 
-      - name: Execute Claim Script
+      - name: 执行领取脚本
         env:
           # 从 GitHub Variables 读取邮箱，从 Secrets 读取密码
           EMAIL: ${{ vars.IP2FREE_EMAIL }}
           PASSWORD: ${{ secrets.IP2FREE_PASSWORD }}
           UA: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         run: |
-          echo "--- 开始登录程序 ---"
+          echo "=========================================="
+          echo "🚀 开始登录程序..."
+          echo "=========================================="
           
           # 1. 自动登录获取 Token
           LOGIN_RESPONSE=$(curl -s -X POST "https://api.ip2free.com/api/account/login?" \
@@ -36,15 +39,18 @@ jobs:
           TOKEN=$(echo "$LOGIN_RESPONSE" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
 
           if [ -z "$TOKEN" ]; then
-            echo "❌ 登录失败"
+            echo "❌ 登录失败！"
             echo "服务器原始响应: $LOGIN_RESPONSE"
             exit 1
           fi
 
           echo "✅ 登录成功，Token 已就绪"
 
-          # 2. 执行领取奖励请求 (Task ID: 48730)
-          # 注意：这里需要添加 Origin 和 Referer 绕过 Nginx 403 限制
+          echo "=========================================="
+          echo "🎁 正在尝试领取任务奖励 (ID: 48730)..."
+          echo "=========================================="
+
+          # 2. 执行领取奖励请求
           CLAIM_RESPONSE=$(curl -s -X POST "https://api.ip2free.com/api/account/finishTask?" \
             -H "User-Agent: $UA" \
             -H "Origin: https://www.ip2free.com" \
@@ -62,9 +68,11 @@ jobs:
             echo "🎉 领取奖励成功！"
             exit 0
           elif echo "$CLAIM_RESPONSE" | grep -q '"code":-1'; then
-            echo "💡 提示：任务早已完成，无需重复领取。"
+            MSG=$(echo "$CLAIM_RESPONSE" | sed -n 's/.*"msg":"\([^"]*\)".*/\1/p')
+            echo "💡 提示：$MSG (通常代表任务已完成)"
             exit 0
           else
             echo "❌ 发生未知错误，流水线判定为失败。"
             exit 1
           fi
+          echo "=========================================="
