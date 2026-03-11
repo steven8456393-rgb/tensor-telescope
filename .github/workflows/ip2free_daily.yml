@@ -46,10 +46,30 @@ jobs:
           echo "✅ 登录成功，Token 已就绪"
 
           echo "=========================================="
-          echo "🎁 正在尝试领取任务奖励 (ID: 48730)..."
+          echo "🔍 正在动态获取任务 ID..."
+          
+          LIST_RESPONSE=$(curl -s "https://api.ip2free.com/api/account/taskList?" \
+            -H "User-Agent: $UA" \
+            -H "x-token: $TOKEN" \
+            -H "webname: IP2FREE" \
+            -H "content-type: text/plain;charset=UTF-8" \
+            -H "lang: cn" \
+            --data-binary "{}")
+
+          # 提取包含指定名称的任务 ID (jq 在 ubuntu-latest 中默认安装)
+          TASK_ID=$(echo "$LIST_RESPONSE" | jq -r '.data.list[] | select(.task_name | contains("每天一次丨点击就送无限流量住宅代理")) | .id' | head -n 1)
+
+          if [ -z "$TASK_ID" ] || [ "$TASK_ID" = "null" ]; then
+            echo "⚠️ 未能动态获取到任务 ID，将使用默认推荐 ID 49130"
+            TASK_ID=49130
+          else
+            echo "🎯 发现任务 ID: $TASK_ID"
+          fi
+
+          echo "🎁 正在尝试领取任务奖励 (ID: $TASK_ID)..."
           echo "=========================================="
 
-          # 2. 执行领取奖励请求
+          # 3. 执行领取奖励请求
           CLAIM_RESPONSE=$(curl -s -X POST "https://api.ip2free.com/api/account/finishTask?" \
             -H "User-Agent: $UA" \
             -H "Origin: https://www.ip2free.com" \
@@ -57,12 +77,12 @@ jobs:
             -H "x-token: $TOKEN" \
             -H "webname: IP2FREE" \
             -H "content-type: text/plain;charset=UTF-8" \
-            --data-binary "{\"id\":48730}")
+            --data-binary "{\"id\":$TASK_ID}")
 
           echo "--- 领取结果处理 ---"
           echo "服务器响应: $CLAIM_RESPONSE"
 
-          # 3. 逻辑判定：成功(code:0) 或 已完成(code:-1) 均视为流水线成功
+          # 4. 逻辑判定：成功(code:0) 或 已完成(code:-1) 均视为流水线成功
           if echo "$CLAIM_RESPONSE" | grep -q '"code":0'; then
             echo "🎉 领取奖励成功！"
             exit 0
