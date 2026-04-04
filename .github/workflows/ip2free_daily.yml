@@ -16,8 +16,8 @@ jobs:
 
       - name: 执行领取脚本
         env:
-          # 从 GitHub Variables 读取邮箱，从 Secrets 读取密码
-          EMAIL: ${{ vars.IP2FREE_EMAIL }}
+          # 改为统一从 Secrets 读取邮箱和密码
+          EMAIL: ${{ secrets.IP2FREE_EMAIL }}
           PASSWORD: ${{ secrets.IP2FREE_PASSWORD }}
           UA: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         run: |
