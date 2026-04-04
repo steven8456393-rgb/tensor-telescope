@@ -18,7 +18,7 @@ jobs:
         env:
           EMAIL: ${{ secrets.IP2FREE_EMAIL }}
           PASSWORD: ${{ secrets.IP2FREE_PASSWORD }}
-          TG_BOT: ${{ secrets.TG_BOT }} # 新增：从 Secrets 读取 TG 机器人配置
+          TG_BOT: ${{ secrets.TG_BOT }}
           UA: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         run: |
           echo "=========================================="
@@ -26,17 +26,19 @@ jobs:
           # 解析 TG_BOT 变量 (格式: chat_id,bot_token)
           IFS=',' read -r TG_CHAT_ID TG_TOKEN <<< "$TG_BOT"
           
-          # 定义 Telegram 推送函数
+          # 定义 Telegram 推送函数 (修改：打印真实报错响应)
           send_tg() {
             local result="$1"
             if [ -n "$TG_CHAT_ID" ] && [ -n "$TG_TOKEN" ]; then
-              # 提前获取北京时间
               local current_time=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
               local msg="🌐 IP2Free 自动领取\n🕐 时间: $current_time\n📊 状态: $result"
-              curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+              
+              echo "⏳ 正在连接 Telegram 接口发送通知..."
+              TG_RESPONSE=$(curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
                 -H "Content-Type: application/json" \
-                -d "{\"chat_id\": \"${TG_CHAT_ID}\", \"text\": \"$msg\"}" > /dev/null
-              echo "📨 TG 推送指令已发出"
+                -d "{\"chat_id\": \"${TG_CHAT_ID}\", \"text\": \"$msg\"}")
+              
+              echo "📨 TG 接口返回结果: $TG_RESPONSE"
             else
               echo "⚠️ TG_BOT 未配置或格式错误，跳过推送"
             fi
