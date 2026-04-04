@@ -16,12 +16,32 @@ jobs:
 
       - name: 执行领取脚本
         env:
-          # 改为统一从 Secrets 读取邮箱和密码
           EMAIL: ${{ secrets.IP2FREE_EMAIL }}
           PASSWORD: ${{ secrets.IP2FREE_PASSWORD }}
+          TG_BOT: ${{ secrets.TG_BOT }} # 新增：从 Secrets 读取 TG 机器人配置
           UA: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         run: |
           echo "=========================================="
+          
+          # 解析 TG_BOT 变量 (格式: chat_id,bot_token)
+          IFS=',' read -r TG_CHAT_ID TG_TOKEN <<< "$TG_BOT"
+          
+          # 定义 Telegram 推送函数
+          send_tg() {
+            local result="$1"
+            if [ -n "$TG_CHAT_ID" ] && [ -n "$TG_TOKEN" ]; then
+              # 提前获取北京时间
+              local current_time=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')
+              local msg="🌐 IP2Free 自动领取\n🕐 时间: $current_time\n📊 状态: $result"
+              curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+                -H "Content-Type: application/json" \
+                -d "{\"chat_id\": \"${TG_CHAT_ID}\", \"text\": \"$msg\"}" > /dev/null
+              echo "📨 TG 推送指令已发出"
+            else
+              echo "⚠️ TG_BOT 未配置或格式错误，跳过推送"
+            fi
+          }
+
           # 随机延迟（0-300秒，即最高5分钟）以规避风控
           DELAY=$((RANDOM % 300))
           echo "⏱️ 为了规避风控，随机延迟 ${DELAY} 秒后执行..."
@@ -45,6 +65,7 @@ jobs:
           if [ -z "$TOKEN" ]; then
             echo "❌ 登录失败！"
             echo "服务器原始响应: $LOGIN_RESPONSE"
+            send_tg "❌ 登录失败，请检查账号密码"
             exit 1
           fi
 
@@ -61,7 +82,7 @@ jobs:
             -H "lang: cn" \
             --data-binary "{}")
 
-          # 提取包含指定名称的任务 ID (jq 在 ubuntu-latest 中默认安装)
+          # 提取包含指定名称的任务 ID
           TASK_ID=$(echo "$LIST_RESPONSE" | jq -r '.data.list[] | select(.task_name | contains("每天一次丨点击就送无限流量住宅代理")) | .id' | head -n 1)
 
           if [ -z "$TASK_ID" ] || [ "$TASK_ID" = "null" ]; then
@@ -87,16 +108,19 @@ jobs:
           echo "--- 领取结果处理 ---"
           echo "服务器响应: $CLAIM_RESPONSE"
 
-          # 4. 逻辑判定：成功(code:0) 或 已完成(code:-1) 均视为流水线成功
+          # 4. 逻辑判定及 TG 结果推送
           if echo "$CLAIM_RESPONSE" | grep -q '"code":0'; then
             echo "🎉 领取奖励成功！"
+            send_tg "🎉 领取奖励成功！"
             exit 0
           elif echo "$CLAIM_RESPONSE" | grep -q '"code":-1'; then
             MSG=$(echo "$CLAIM_RESPONSE" | sed -n 's/.*"msg":"\([^"]*\)".*/\1/p')
             echo "💡 提示：$MSG (通常代表任务已完成)"
+            send_tg "💡 提示：$MSG"
             exit 0
           else
             echo "❌ 发生未知错误，流水线判定为失败。"
+            send_tg "❌ 发生未知错误，流水线判定为失败"
             exit 1
           fi
           echo "=========================================="
