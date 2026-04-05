@@ -84,8 +84,8 @@ jobs:
             -H "lang: cn" \
             --data-binary "{}")
 
-          # 提取包含指定名称的任务 ID
-          TASK_ID=$(echo "$LIST_RESPONSE" | jq -r '.data.list[] | select(.task_name | contains("每天一次丨点击就送无限流量住宅代理")) | .id' | head -n 1)
+          # 提取包含指定名称的任务 ID (已优化：使用多关键词模糊匹配，防止官方微调文案失效)
+          TASK_ID=$(echo "$LIST_RESPONSE" | jq -r '.data.list[] | select(.task_name | contains("每天一次") and contains("点击就送")) | .id' | head -n 1)
 
           if [ -z "$TASK_ID" ] || [ "$TASK_ID" = "null" ]; then
             echo "⚠️ 未能动态获取到任务 ID，将使用默认推荐 ID 49130"
